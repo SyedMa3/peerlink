@@ -16,6 +16,8 @@ func ReceiveFile() {
 			{
 				URLs: []string{
 					"stun:stun1.l.google.com:19302",
+					"stun:stun2.l.google.com:19302",
+					"stun:stun3.l.google.com:19302",
 				},
 			},
 		},
@@ -30,28 +32,15 @@ func ReceiveFile() {
 			panic(err)
 		}
 	}()
-
-	pconn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-		answerFile, err := os.Create("answer")
-		if err != nil {
-			fmt.Println("Error creating answer file:", err)
-			return
-		}
-		// defer answerFile.Close()
-
-		_, err = answerFile.WriteString(pconn.LocalDescription().SDP)
-		if err != nil {
-			fmt.Println("Error writing to answer file:", err)
-		}
-	})
+	gatherDone := webrtc.GatheringCompletePromise(pconn)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	pconn.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
-		// fmt.Println(pconn.LocalDescription().SDP)
-	})
+	// pconn.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
+	// 	fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
+	// 	// fmt.Println(pconn.LocalDescription().SDP)
+	// })
 
 	pconn.OnDataChannel(func(dc *webrtc.DataChannel) {
 		fmt.Printf("Data channel %s %d opened\n", dc.Label(), dc.ID())
@@ -108,6 +97,9 @@ func ReceiveFile() {
 	if err != nil {
 		panic(err)
 	}
+
+	<-gatherDone
+	WriteSDPToFile(pconn, "answer")
 
 	// // Write the answer SDP to a file
 	// answerFile, err := os.Create("answer")

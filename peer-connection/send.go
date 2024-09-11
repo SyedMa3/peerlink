@@ -11,6 +11,20 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
+func WriteSDPToFile(pconn *webrtc.PeerConnection, fileName string) {
+	offerFile, err := os.Create(fileName)
+	if err != nil {
+		fmt.Println("Error creating SDP file:", err)
+		return
+	}
+	defer offerFile.Close()
+
+	_, err = offerFile.WriteString(pconn.LocalDescription().SDP)
+	if err != nil {
+		fmt.Println("Error writing to SDP file:", err)
+	}
+}
+
 func SendFile() {
 	var fileName string
 	wg := sync.WaitGroup{}
@@ -21,6 +35,8 @@ func SendFile() {
 			{
 				URLs: []string{
 					"stun:stun1.l.google.com:19302",
+					"stun:stun2.l.google.com:19302",
+					"stun:stun3.l.google.com:19302",
 				},
 			},
 		},
@@ -35,20 +51,11 @@ func SendFile() {
 			log.Println("Failed to close peer connection:", err)
 		}
 	}()
+	gatherDone := webrtc.GatheringCompletePromise(pconn)
 
-	pconn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-		offerFile, err := os.Create("offer")
-		if err != nil {
-			fmt.Println("Error creating offer file:", err)
-			return
-		}
-		// defer offerFile.Close()
+	// pconn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 
-		_, err = offerFile.WriteString(pconn.LocalDescription().SDP)
-		if err != nil {
-			fmt.Println("Error writing to offer file:", err)
-		}
-	})
+	// })
 
 	// ICE connection state handling
 	pconn.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
@@ -90,6 +97,9 @@ func SendFile() {
 	fmt.Print("Enter file name: ")
 	fmt.Scanln(&fileName)
 
+	<-gatherDone
+	WriteSDPToFile(pconn, "offer")
+
 	// Print the Local SDP for the user to copy and send to the client
 	// localSDP := pconn.LocalDescription().SDP
 	// file, err := os.Create("offer")
@@ -106,7 +116,6 @@ func SendFile() {
 	// fmt.Println("Offer SDP written to 'offer' file")
 
 	// Ask the user to enter the remote SDP
-	fmt.Println("Please enter the remote SDP file name:")
 	var remoteSDPFileName string
 	fmt.Print("Enter the file name containing the remote SDP: ")
 	fmt.Scanln(&remoteSDPFileName)
