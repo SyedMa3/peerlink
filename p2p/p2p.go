@@ -28,7 +28,9 @@ const (
 )
 
 func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
-	h, err := libp2p.New()
+	h, err := libp2p.New(
+		libp2p.EnableHolePunching(),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("NewHost: failed to create libp2p host: %w", err)
 	}
