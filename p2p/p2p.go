@@ -29,7 +29,9 @@ const (
 
 func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 	h, err := libp2p.New(
-		libp2p.EnableHolePunching(),
+	// libp2p.EnableHolePunching(),
+	// libp2p.EnableAutoNATv2(),
+	// libp2p.EnableAutoRelayWithStaticRelays(dht.GetDefaultBootstrapPeerAddrInfos()),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("NewHost: failed to create libp2p host: %w", err)
@@ -117,7 +119,7 @@ func HandleSend(ctx context.Context, node *Node) error {
 	fmt.Println("handleSend: published address to DHT")
 
 	// Wait for handshake to complete
-	<-handshakeDone
+	// <-handshakeDone
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -236,8 +238,10 @@ func HandleReceive(ctx context.Context, node *Node) error {
 		return fmt.Errorf("handleReceive: failed to create handshake stream: %w", err)
 	}
 
-	// Initialize PAKE for sender
-	p, err := pake.InitCurve([]byte(node.words[0]), 0, "siec")
+	weakKey := []byte(strings.Join(node.words, " "))
+
+	// Initialize PAKE for sender with the generated key
+	p, err := pake.InitCurve(weakKey, 0, "siec")
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to initialize PAKE: %w", err)
 	}
@@ -254,6 +258,7 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to read PAKE bytes: %w", err)
 	}
+	fmt.Println("senderBytes:", senderBytes)
 
 	// Update PAKE with sender's bytes
 	if err := p.Update(senderBytes); err != nil {
@@ -265,6 +270,7 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to derive session key: %w", err)
 	}
+	handshakeStream.Close()
 
 	node.sharedKey = sessionKey
 
@@ -326,8 +332,10 @@ func readInput() (string, error) {
 func handleHandshake(stream network.Stream, node *Node, handshakeDone chan struct{}) {
 	defer stream.Close()
 
+	weakKey := []byte(strings.Join(node.words, " "))
+
 	// Initialize PAKE for receiver
-	p, err := pake.InitCurve([]byte(node.words[0]), 1, "siec")
+	p, err := pake.InitCurve(weakKey, 1, "siec")
 	if err != nil {
 		log.Printf("handleHandshake: failed to initialize PAKE: %v", err)
 		return
@@ -358,6 +366,16 @@ func handleHandshake(stream network.Stream, node *Node, handshakeDone chan struc
 	sessionKey, err := p.SessionKey()
 	if err != nil {
 		log.Printf("handleHandshake: failed to derive session key: %v", err)
+		return
+	}
+
+	d, err := readBytes(stream)
+	if err != io.EOF {
+		if err != nil {
+			log.Printf("handleHandshake: unexpected data received: %v", d)
+			return
+		}
+		log.Printf("handleHandshake: failed to read sender bytes: %v", err)
 		return
 	}
 
