@@ -29,9 +29,9 @@ const (
 
 func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 	h, err := libp2p.New(
-	// libp2p.EnableHolePunching(),
-	// libp2p.EnableAutoNATv2(),
-	// libp2p.EnableAutoRelayWithStaticRelays(dht.GetDefaultBootstrapPeerAddrInfos()),
+		libp2p.EnableHolePunching(),
+		libp2p.EnableAutoNATv2(),
+		libp2p.EnableAutoRelayWithStaticRelays(dht.GetDefaultBootstrapPeerAddrInfos()),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("NewHost: failed to create libp2p host: %w", err)
@@ -177,6 +177,16 @@ func sendFile(stream network.Stream, filePath string, key []byte, wg *sync.WaitG
 		}
 	}
 
+	d, err := readBytes(stream)
+	if err != io.EOF {
+		if err != nil {
+			log.Printf("handleHandshake: unexpected data received: %v", d)
+			return
+		}
+		log.Printf("handleHandshake: failed to read sender bytes: %v", err)
+		return
+	}
+
 	fmt.Println("File sent successfully")
 }
 
@@ -293,7 +303,6 @@ func HandleReceive(ctx context.Context, node *Node) error {
 }
 
 func receiveFile(stream network.Stream, key []byte) error {
-	defer stream.Close()
 
 	// Buffer to read encrypted data
 	encryptedBuffer := make([]byte, 4096)
