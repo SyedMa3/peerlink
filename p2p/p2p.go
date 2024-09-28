@@ -137,7 +137,6 @@ func HandleSend(ctx context.Context, node *Node) error {
 }
 
 func sendFile(stream network.Stream, filePath string, key []byte, wg *sync.WaitGroup) {
-	defer stream.Close()
 	defer wg.Done()
 
 	// Open the file
@@ -176,18 +175,9 @@ func sendFile(stream network.Stream, filePath string, key []byte, wg *sync.WaitG
 			return
 		}
 	}
-
-	d, err := readBytes(stream)
-	if err != io.EOF {
-		if err != nil {
-			log.Printf("handleHandshake: unexpected data received: %v", d)
-			return
-		}
-		log.Printf("handleHandshake: failed to read sender bytes: %v", err)
-		return
-	}
-
 	fmt.Println("File sent successfully")
+
+	stream.Close()
 }
 
 func HandleReceive(ctx context.Context, node *Node) error {
@@ -291,12 +281,12 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to create file transfer stream: %w", err)
 	}
-	defer stream.Close()
 
 	// Receive the file using the shared key
 	if err := receiveFile(stream, node.sharedKey); err != nil {
 		return fmt.Errorf("handleReceive: failed to receive file: %w", err)
 	}
+	stream.Close()
 
 	fmt.Println("\nFile received and decrypted successfully")
 	return nil
@@ -306,7 +296,11 @@ func receiveFile(stream network.Stream, key []byte) error {
 
 	// Buffer to read encrypted data
 	encryptedBuffer := make([]byte, 4096)
+	var encryptedData []byte
 
+	fmt.Println("receiveFile: starting to read from stream")
+
+	// Read all encrypted data into memory
 	for {
 		n, err := stream.Read(encryptedBuffer)
 		if err != nil {
@@ -315,15 +309,27 @@ func receiveFile(stream network.Stream, key []byte) error {
 			}
 			return fmt.Errorf("receiveFile: failed to read from stream: %w", err)
 		}
+		encryptedData = append(encryptedData, encryptedBuffer[:n]...)
+	}
 
-		// Decrypt the chunk using the shared key
-		decryptedChunk, err := handshake.Decrypt(key, encryptedBuffer[:n])
+	fmt.Println("receiveFile: finished reading from stream")
+
+	// Decrypt data in blocks
+	for len(encryptedData) > 0 {
+		blockSize := 4096
+		if len(encryptedData) < blockSize {
+			blockSize = len(encryptedData)
+		}
+
+		decryptedChunk, err := handshake.Decrypt(key, encryptedData[:blockSize])
 		if err != nil {
 			return fmt.Errorf("receiveFile: failed to decrypt chunk: %w", err)
 		}
 
 		// Handle the decrypted data (e.g., save to file or output)
 		fmt.Print(string(decryptedChunk))
+
+		encryptedData = encryptedData[blockSize:]
 	}
 
 	return nil
