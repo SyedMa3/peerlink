@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Node struct {
@@ -62,6 +63,39 @@ func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 	}
 
 	return h, kademliaDHT, nil
+}
+
+func (n *Node) QueryAndConnect(ctx context.Context) (*peer.AddrInfo, error) {
+	providers, err := n.QueryAddress(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("QueryAndConnect: failed to query DHT: %w", err)
+	}
+
+	if len(providers) == 0 {
+		return nil, fmt.Errorf("QueryAndConnect: no providers found for the given CID")
+	}
+
+	fmt.Printf("Retrieved %d provider(s)\n", len(providers))
+
+	var connectedSender peer.AddrInfo
+	var connected bool
+
+	for _, senderInfo := range providers {
+		if err := n.Host.Connect(ctx, senderInfo); err != nil {
+			fmt.Printf("Failed to connect to sender %s: %v\n", senderInfo.ID, err)
+			continue
+		}
+		fmt.Printf("Connected to: %s\n", senderInfo.ID)
+		connectedSender = senderInfo
+		connected = true
+		break
+	}
+
+	if !connected {
+		return nil, fmt.Errorf("QueryAndConnect: failed to connect to any sender")
+	}
+
+	return &connectedSender, nil
 }
 
 func (n *Node) generateWordsAndCid() error {
