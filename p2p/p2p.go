@@ -47,7 +47,7 @@ func HandleSend(ctx context.Context, node *Node) error {
 	fmt.Println("\nShare the following four words with the receiver securely:")
 	fmt.Println(strings.Join(node.words, " "))
 
-	publishCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	publishCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	err = node.PublishAddress(publishCtx)
@@ -156,79 +156,18 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	providers, err := node.QueryAddress(queryCtx)
+	connectedSender, err := node.QueryAndConnect(queryCtx)
 	if err != nil {
-		return fmt.Errorf("handleReceive: failed to query DHT: %w", err)
+		return fmt.Errorf("handleReceive: failed to query and connect to sender: %w", err)
 	}
 
-	if len(providers) == 0 {
-		return fmt.Errorf("handleReceive: no providers found for the given CID")
-	}
-
-	fmt.Printf("Retrieved %d provider(s)\n", len(providers))
-
-	var connectedSender peer.AddrInfo
-	var connected bool
-
-	for _, senderInfo := range providers {
-		if err := node.Host.Connect(ctx, senderInfo); err != nil {
-			fmt.Printf("Failed to connect to sender %s: %v\n", senderInfo.ID, err)
-			continue
-		}
-		fmt.Printf("Connected to: %s\n", senderInfo.ID)
-		connectedSender = senderInfo
-		connected = true
-		break
-	}
-
-	if !connected {
-		return fmt.Errorf("handleReceive: failed to connect to any sender")
-	}
-
-	handshakeStream, err := node.Host.NewStream(ctx, connectedSender.ID, HandshakeProtocol)
+	err = startHandshake(ctx, node, connectedSender)
 	if err != nil {
-		return fmt.Errorf("handleReceive: failed to create handshake stream: %w", err)
+		return fmt.Errorf("handleReceive: handshake failed: %w", err)
 	}
-
-	weakKey := []byte(strings.Join(node.words, " "))
-
-	p, err := pake.InitCurve(weakKey, 0, "siec")
-	if err != nil {
-		return fmt.Errorf("handleReceive: failed to initialize PAKE: %w", err)
-	}
-
-	receiverBytes := p.Bytes()
-	_, err = handshakeStream.Write(receiverBytes)
-	if err != nil {
-		return fmt.Errorf("handleReceive: failed to send PAKE bytes: %w", err)
-	}
-
-	senderBytes, err := readBytes(handshakeStream)
-	if err != nil {
-		return fmt.Errorf("handleReceive: failed to read PAKE bytes: %w", err)
-	}
-
-	if err := p.Update(senderBytes); err != nil {
-		return fmt.Errorf("handleReceive: failed to update PAKE: %w", err)
-	}
-
-	sessionKey, err := p.SessionKey()
-	if err != nil {
-		return fmt.Errorf("handleReceive: failed to derive session key: %w", err)
-	}
-	handshakeStream.Close()
-
-	node.sharedKey = sessionKey
-
 	fmt.Println("Handshake completed successfully")
 
-	stream, err := node.Host.NewStream(ctx, connectedSender.ID, FileTransferProtocol)
-	if err != nil {
-		return fmt.Errorf("handleReceive: failed to create file transfer stream: %w", err)
-	}
-	defer stream.Close()
-
-	if err := receiveFile(stream, node.sharedKey); err != nil {
+	if err := receiveFile(ctx, node, connectedSender); err != nil {
 		return fmt.Errorf("handleReceive: failed to receive file: %w", err)
 	}
 
@@ -236,19 +175,52 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	return nil
 }
 
-func receiveFile(stream network.Stream, key []byte) error {
-	fmt.Println("receiveFile: starting to read from stream")
+func receiveFile(ctx context.Context, node *Node, senderID *peer.AddrInfo) error {
+
+	fmt.Print("Enter the filename to save the received file: ")
+	filename, err := readInput()
+	if err != nil {
+		log.Printf("readData: failed to read filename input: %v", err)
+		return nil
+	}
+
+	// Check if file already exists
+	if _, err := os.Stat(filename); err == nil {
+		fmt.Printf("File %s already exists. Do you want to overwrite it? (y/n): ", filename)
+		answer, err := readInput()
+		if err != nil {
+			log.Printf("readData: failed to read overwrite confirmation: %v", err)
+			return nil
+		}
+		if strings.ToLower(answer) != "y" {
+			log.Printf("readData: user chose not to overwrite existing file. Closing.\n")
+			return nil
+		}
+	}
+
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Printf("readData: failed to create file %s: %v", filename, err)
+		return nil
+	}
+	defer file.Close()
+
+	stream, err := node.Host.NewStream(ctx, senderID.ID, FileTransferProtocol)
+	if err != nil {
+		return fmt.Errorf("receiveFile: failed to create file transfer stream: %w", err)
+	}
+	defer stream.Close()
 
 	// Read the SHA256 checksum of the file from the stream
 	checksum := make([]byte, 32) // SHA256 produces a 32-byte hash
-	_, err := io.ReadFull(stream, checksum)
+	_, err = io.ReadFull(stream, checksum)
 	if err != nil {
 		return fmt.Errorf("receiveFile: failed to read file checksum: %w", err)
 	}
 	fmt.Printf("Received file checksum: %x\n", checksum)
 
 	rw := bufio.NewReader(stream)
-	calculatedChecksum := readData(rw, key)
+	calculatedChecksum := readData(rw, node.sharedKey, file)
 
 	fmt.Printf("Calculated checksum: %x\n", calculatedChecksum)
 	if !bytes.Equal(checksum, calculatedChecksum) {
@@ -260,15 +232,8 @@ func receiveFile(stream network.Stream, key []byte) error {
 	return nil
 }
 
-func readData(r *bufio.Reader, key []byte) []byte {
+func readData(r *bufio.Reader, key []byte, file *os.File) []byte {
 	reader := rw.NewPReader(r, key)
-
-	file, err := os.Create("tmp")
-	if err != nil {
-		log.Printf("readData: failed to create tmp file: %v", err)
-		return nil
-	}
-	defer file.Close()
 
 	checksum := sha256.New()
 	n, err := io.Copy(io.MultiWriter(file, checksum), reader)
@@ -313,7 +278,6 @@ func handleHandshake(stream network.Stream, node *Node) {
 	}
 
 	receiverBytes := p.Bytes()
-	fmt.Println("receiverBytes:", receiverBytes)
 	if _, err := stream.Write(receiverBytes); err != nil {
 		log.Printf("handleHandshake: failed to send receiver bytes: %v", err)
 		return
@@ -336,7 +300,7 @@ func handleHandshake(stream network.Stream, node *Node) {
 	}
 
 	node.sharedKey = sessionKey
-	log.Println("handleHandshake: PAKE authentication successful")
+	fmt.Println("PAKE authentication successful")
 }
 
 func readBytes(stream network.Stream) ([]byte, error) {
@@ -346,4 +310,42 @@ func readBytes(stream network.Stream) ([]byte, error) {
 		return nil, err
 	}
 	return buf[:n], nil
+}
+
+func startHandshake(ctx context.Context, node *Node, senderID *peer.AddrInfo) error {
+	handshakeStream, err := node.Host.NewStream(ctx, senderID.ID, HandshakeProtocol)
+	if err != nil {
+		return fmt.Errorf("performHandshake: failed to create handshake stream: %w", err)
+	}
+	defer handshakeStream.Close()
+
+	weakKey := []byte(strings.Join(node.words, " "))
+
+	p, err := pake.InitCurve(weakKey, 0, "siec")
+	if err != nil {
+		return fmt.Errorf("performHandshake: failed to initialize PAKE: %w", err)
+	}
+
+	receiverBytes := p.Bytes()
+	_, err = handshakeStream.Write(receiverBytes)
+	if err != nil {
+		return fmt.Errorf("performHandshake: failed to send PAKE bytes: %w", err)
+	}
+
+	senderBytes, err := readBytes(handshakeStream)
+	if err != nil {
+		return fmt.Errorf("performHandshake: failed to read PAKE bytes: %w", err)
+	}
+
+	if err := p.Update(senderBytes); err != nil {
+		return fmt.Errorf("performHandshake: failed to update PAKE: %w", err)
+	}
+
+	sessionKey, err := p.SessionKey()
+	if err != nil {
+		return fmt.Errorf("performHandshake: failed to derive session key: %w", err)
+	}
+
+	node.sharedKey = sessionKey
+	return nil
 }
