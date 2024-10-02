@@ -2,6 +2,8 @@
 
 PeerLink is a robust peer-to-peer (P2P) file transfer application designed to minimize reliance on centralized servers. Leveraging the power of **libp2p** and **IPFS**, PeerLink ensures secure, efficient, and reliable file sharing directly between users.
 
+![PeerLink Logo](./peerlink-logo.png)
+
 ## Table of Contents
 
 - [PeerLink](#peerlink)
