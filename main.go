@@ -22,6 +22,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("main: failed to create node: %v", err)
 	}
+	defer node.Host.Close()
 
 	// Prompt user for action
 	fmt.Println("\nChoose an option:")
