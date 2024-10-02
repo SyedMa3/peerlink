@@ -2,7 +2,9 @@ package p2p
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -79,10 +81,46 @@ func sendFile(stream network.Stream, filePath string, key []byte, wg *sync.WaitG
 	}
 	defer file.Close()
 
+	// Calculate the hash of the file
+	hash, err := calculateFileHash(file)
+	if err != nil {
+		log.Printf("sendFile: failed to calculate file hash: %v", err)
+		return
+	}
+
+	// Send the hash to the receiver
+	hashWriter := bufio.NewWriter(stream)
+	_, err = hashWriter.Write(hash)
+	if err != nil {
+		log.Printf("sendFile: failed to send file hash: %v", err)
+		return
+	}
+	err = hashWriter.Flush()
+	if err != nil {
+		log.Printf("sendFile: failed to flush hash writer: %v", err)
+		return
+	}
+
+	// Reset the file pointer to the beginning
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		log.Printf("sendFile: failed to reset file pointer: %v", err)
+		return
+	}
+
 	fmt.Printf("Sending file: %s\n", filePath)
 
 	rw := bufio.NewWriter(stream)
 	writeData(file, key, rw)
+}
+
+func calculateFileHash(file *os.File) ([]byte, error) {
+	hash := sha256.New()
+	_, err := io.Copy(hash, file)
+	if err != nil {
+		return nil, fmt.Errorf("calculateFileHash: failed to calculate file hash: %w", err)
+	}
+	return hash.Sum(nil), nil
 }
 
 func writeData(file *os.File, key []byte, w *bufio.Writer) {
@@ -169,7 +207,6 @@ func HandleReceive(ctx context.Context, node *Node) error {
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to read PAKE bytes: %w", err)
 	}
-	fmt.Println("senderBytes:", senderBytes)
 
 	if err := p.Update(senderBytes); err != nil {
 		return fmt.Errorf("handleReceive: failed to update PAKE: %w", err)
@@ -202,29 +239,46 @@ func HandleReceive(ctx context.Context, node *Node) error {
 func receiveFile(stream network.Stream, key []byte) error {
 	fmt.Println("receiveFile: starting to read from stream")
 
+	// Read the SHA256 checksum of the file from the stream
+	checksum := make([]byte, 32) // SHA256 produces a 32-byte hash
+	_, err := io.ReadFull(stream, checksum)
+	if err != nil {
+		return fmt.Errorf("receiveFile: failed to read file checksum: %w", err)
+	}
+	fmt.Printf("Received file checksum: %x\n", checksum)
+
 	rw := bufio.NewReader(stream)
-	readData(rw, key)
+	calculatedChecksum := readData(rw, key)
+
+	fmt.Printf("Calculated checksum: %x\n", calculatedChecksum)
+	if !bytes.Equal(checksum, calculatedChecksum) {
+		return fmt.Errorf("receiveFile: received file checksum does not match")
+	}
 
 	stream.Close()
 
 	return nil
 }
 
-func readData(r *bufio.Reader, key []byte) {
+func readData(r *bufio.Reader, key []byte) []byte {
 	reader := rw.NewPReader(r, key)
 
 	file, err := os.Create("tmp")
 	if err != nil {
 		log.Printf("readData: failed to create tmp file: %v", err)
-		return
+		return nil
 	}
 	defer file.Close()
 
-	n, err := io.Copy(file, reader)
+	checksum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(file, checksum), reader)
 	if err != nil {
 		log.Printf("readData: failed to copy data to tmp file: %v", err)
+		return nil
 	}
 	fmt.Println("readData: copied", n, "bytes to stdout")
+
+	return checksum.Sum(nil)
 }
 
 func readInput() (string, error) {
