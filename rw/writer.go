@@ -3,8 +3,9 @@ package rw
 import (
 	"fmt"
 	"io"
+	"os"
 
-	"github.com/SyedMa3/peerlink/handshake"
+	"github.com/SyedMa3/peerlink/utils"
 )
 
 type PWriter struct {
@@ -18,7 +19,7 @@ func NewPWriter(w io.Writer, key []byte) *PWriter {
 
 func (w *PWriter) Write(p []byte) (n int, err error) {
 	// Encrypt the data before writing
-	encryptedData, err := handshake.Encrypt(w.key, p)
+	encryptedData, err := utils.Encrypt(w.key, p)
 	if err != nil {
 		return 0, fmt.Errorf("failed to encrypt data: %w", err)
 	}
@@ -43,4 +44,14 @@ func (w *PWriter) Write(p []byte) (n int, err error) {
 	}
 
 	return len(p), nil
+}
+
+func WriteData(file *os.File, key []byte, w io.Writer) (int64, error) {
+	writer := NewPWriter(w, key)
+
+	n, err := io.Copy(writer, file)
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }

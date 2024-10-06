@@ -1,10 +1,14 @@
 package rw
 
 import (
+	"bufio"
+	"crypto/sha256"
 	"fmt"
 	"io"
+	"log"
+	"os"
 
-	"github.com/SyedMa3/peerlink/handshake"
+	"github.com/SyedMa3/peerlink/utils"
 )
 
 type PReader struct {
@@ -41,7 +45,7 @@ func (r *PReader) Read(p []byte) (n int, err error) {
 	}
 
 	// Decrypt the data
-	decryptedData, err := handshake.Decrypt(r.key, encryptedData)
+	decryptedData, err := utils.Decrypt(r.key, encryptedData)
 	if err != nil {
 		return 0, fmt.Errorf("failed to decrypt data: %w", err)
 	}
@@ -49,4 +53,18 @@ func (r *PReader) Read(p []byte) (n int, err error) {
 	// Copy the decrypted data to the output buffer
 	n = copy(p, decryptedData)
 	return n, nil
+}
+
+func ReadData(r *bufio.Reader, key []byte, file *os.File) []byte {
+	reader := NewPReader(r, key)
+
+	checksum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(file, checksum), reader)
+	if err != nil {
+		log.Printf("readData: failed to copy data to tmp file: %v", err)
+		return nil
+	}
+	fmt.Println("readData: copied", n, "bytes to stdout")
+
+	return checksum.Sum(nil)
 }

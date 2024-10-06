@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/SyedMa3/peerlink/handshake"
+	"github.com/SyedMa3/peerlink/protocol"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -99,11 +99,11 @@ func (n *Node) QueryAndConnect(ctx context.Context) (*peer.AddrInfo, error) {
 }
 
 func (n *Node) generateWordsAndCid() error {
-	words, err := handshake.GenerateRandomWords()
+	words, err := protocol.GenerateRandomWords()
 	if err != nil {
 		return fmt.Errorf("generateWordsAndCid: failed to generate random words: %w", err)
 	}
-	cid, err := handshake.GenerateCIDFromWordAndTime(words[0])
+	cid, err := protocol.GenerateCIDFromWordAndTime(words[0])
 	if err != nil {
 		return fmt.Errorf("generateWordsAndCid: failed to generate CID: %w", err)
 	}
@@ -113,7 +113,7 @@ func (n *Node) generateWordsAndCid() error {
 }
 
 func (n *Node) setWordsAndCid(words []string) error {
-	cid, err := handshake.GenerateCIDFromWordAndTime(words[0])
+	cid, err := protocol.GenerateCIDFromWordAndTime(words[0])
 	if err != nil {
 		return fmt.Errorf("setWordsAndCid: failed to generate CID: %w", err)
 	}

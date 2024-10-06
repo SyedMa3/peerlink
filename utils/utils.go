@@ -1,13 +1,37 @@
-package handshake
+package utils
 
 import (
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+
+	"github.com/libp2p/go-libp2p/core/network"
 )
+
+func ReadInput() (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("readInput: failed to read input: %w", err)
+	}
+	return strings.TrimSpace(input), nil
+}
+
+func ReadBytes(stream network.Stream) ([]byte, error) {
+	buf := make([]byte, 1024)
+	n, err := stream.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf[:n], nil
+}
 
 // Encrypt encrypts the given data using the derived key
 func Encrypt(key, data []byte) ([]byte, error) {
@@ -72,4 +96,33 @@ func BytesToHex(b []byte) string {
 // HexToBytes converts a hexadecimal string to a byte slice
 func HexToBytes(s string) ([]byte, error) {
 	return hex.DecodeString(s)
+}
+
+func CalculateFileHash(file *os.File) ([]byte, error) {
+	hash := sha256.New()
+	_, err := io.Copy(hash, file)
+	if err != nil {
+		return nil, fmt.Errorf("calculateFileHash: failed to calculate file hash: %w", err)
+	}
+	return hash.Sum(nil), nil
+}
+
+func CheckFileExists(filename string) (*os.File, error) {
+	// Check if file already exists
+	if _, err := os.Stat(filename); err == nil {
+		fmt.Printf("File %s already exists. Do you want to overwrite it? (y/n): ", filename)
+		answer, err := ReadInput()
+		if err != nil {
+			return nil, err
+		}
+		if strings.ToLower(answer) != "y" {
+			return nil, fmt.Errorf("user chose not to overwrite existing file. Closing")
+		}
+	}
+
+	file, err := os.Create(filename)
+	if err != nil {
+		return nil, fmt.Errorf("CheckFileExists: failed to create file %s: %v", filename, err)
+	}
+	return file, nil
 }
