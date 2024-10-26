@@ -35,7 +35,7 @@ PeerLink operates through a command-line interface, offering two primary functio
 1. **Run PeerLink:**
 
    ```bash
-   go run main.go send <filename>
+   ./peerlink send <filename>
    ```
 
 2. **Share the Secret Words:**
@@ -65,7 +65,7 @@ PeerLink operates through a command-line interface, offering two primary functio
 1. **Run PeerLink:**
 
    ```bash
-   go run main.go receive <input-passphrase>
+   ./peerlink receive <input-passphrase>
    ```
 
 2. **Confirm File Transfer:**
