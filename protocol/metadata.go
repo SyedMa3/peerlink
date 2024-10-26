@@ -91,6 +91,10 @@ func ReceiveMetadata(stream network.Stream, key []byte) (bool, error) {
 	response = strings.TrimSpace(strings.ToLower(response))
 
 	// Send confirmation back to sender
+	if response != "y" {
+		response = "n"
+	}
+
 	_, err = pwriter.Write([]byte(response))
 	if err != nil {
 		return false, fmt.Errorf("ReceiveMetadata: failed to send confirmation: %w", err)
@@ -100,9 +104,5 @@ func ReceiveMetadata(stream network.Stream, key []byte) (bool, error) {
 		return false, fmt.Errorf("ReceiveMetadata: failed to flush writer: %w", err)
 	}
 
-	if response == "y" {
-		return true, nil
-	} else {
-		return false, nil
-	}
+	return response == "y", nil
 }

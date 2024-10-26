@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/SyedMa3/peerlink/p2p"
+	"github.com/briandowns/spinner"
 	"github.com/urfave/cli/v2"
 )
 
@@ -14,6 +16,8 @@ func main() {
 	// Create a new libp2p host with DHT
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	fmt.Printf("Starting PeerLink...\n\n")
 
 	app := &cli.App{
 		Name:  "peerlink",
@@ -62,5 +66,10 @@ func main() {
 }
 
 func initNode(ctx context.Context) (*p2p.Node, error) {
+	s := spinner.New(spinner.CharSets[7], 100*time.Millisecond)
+	s.Suffix = " Connecting to bootstrap nodes...\n"
+	s.FinalMSG = "Connected to bootstrap nodes!\n"
+	s.Start()
+	defer s.Stop()
 	return p2p.NewNode(ctx)
 }

@@ -26,23 +26,23 @@ func GenerateRandomWords() ([]string, error) {
 
 	// Split mnemonic into words and select the first four
 	words := strings.Split(mnemonic, " ")
-	if len(words) < 4 {
+	if len(words) < 5 {
 		return nil, fmt.Errorf("GenerateRandomWords: insufficient number of words generated")
 	}
 
-	return words[:4], nil
+	return words[:5], nil
 }
 
-// GenerateCIDFromWordAndTime appends the first word and the current time (rounded up to 1 hour) to generate a CID.
-func GenerateCIDFromWordAndTime(word string) (cid.Cid, error) {
+// GenerateCIDFromWordAndTime appends the first word and the current time (rounded up to 10 minutes) to generate a CID.
+func GenerateCIDFromWordAndTime(words []string) (cid.Cid, error) {
 	// Get the current time in UTC
 	currentTime := time.Now().UTC()
 
-	// Round up to the nearest hour
-	roundedTime := currentTime.Truncate(time.Hour).Format(time.RFC3339)
+	// Round up to the nearest day
+	roundedTime := currentTime.Truncate(24 * time.Hour).Format(time.RFC3339)
 
 	// Combine the first word with the rounded time
-	data := fmt.Sprintf("%s|%s", word, roundedTime)
+	data := fmt.Sprintf("pl<%s|%s|%s|%s|%s>", words[0], words[1], words[2], words[3], roundedTime)
 	dataBytes := []byte(data)
 
 	// Create a multihash using SHA2-256

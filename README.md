@@ -55,6 +55,11 @@ PeerLink operates through a command-line interface, offering two primary functio
    Waiting for the receiver to connect and request the file...
    ```
 
+> [!WARNING]
+> Sometimes, sending a file may fail due to an error in publishing the CID to the DHT. If this occurs, simply try the process again. This is a known issue with the underlying network and usually resolves on subsequent attempt.
+> **If anyone has a fix for this, please do create a PR!**
+
+
 ### Receiving a File
 
 1. **Run PeerLink:**

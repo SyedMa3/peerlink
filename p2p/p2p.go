@@ -50,7 +50,6 @@ func HandleSend(ctx context.Context, node *Node, filePath string) error {
 	if err != nil {
 		return fmt.Errorf("handleSend: failed to publish address to DHT: %w", err)
 	}
-	fmt.Println("published address to DHT")
 	fmt.Println("Share the following four words with the receiver securely:")
 	fmt.Println(strings.Join(node.words, "-"))
 
@@ -97,8 +96,8 @@ func HandleSend(ctx context.Context, node *Node, filePath string) error {
 
 func HandleReceive(ctx context.Context, node *Node, passphrase string) error {
 	words := strings.Split(passphrase, "-")
-	if len(words) != 4 {
-		return fmt.Errorf("handleReceive: exactly four words are required")
+	if len(words) != 5 {
+		return fmt.Errorf("handleReceive: exactly five words are required")
 	}
 
 	err := node.setWordsAndCid(words)
