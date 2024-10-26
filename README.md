@@ -77,17 +77,7 @@ PeerLink operates through a command-line interface, offering two primary functio
    Do you want to receive the file? (y/n)
    ```
 
-3. **Specify Save Location:**
-
-   Enter the filename where the received file will be saved:
-
-   ```
-   Enter the filename to save the received file:
-   ```
-
-   If a file with the specified name already exists, you'll be prompted to confirm overwriting.
-
-4. **Receive and Verify File:**
+3. **Receive and Verify File:**
 
    PeerLink downloads the file, verifies its integrity using the SHA-256 checksum, and saves it to the specified location.
 
