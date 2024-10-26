@@ -3,7 +3,6 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/SyedMa3/peerlink/protocol"
 	"github.com/ipfs/go-cid"
@@ -24,7 +23,7 @@ type Node struct {
 func NewNode(ctx context.Context) (*Node, error) {
 	h, kademliaDHT, err := NewHost(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("NewNode: failed to create host: %w", err)
+		return nil, fmt.Errorf("failed to create host: %w", err)
 	}
 
 	return &Node{
@@ -40,26 +39,32 @@ func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 		libp2p.EnableAutoRelayWithStaticRelays(dht.GetDefaultBootstrapPeerAddrInfos()),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewHost: failed to create libp2p host: %w", err)
+		return nil, nil, fmt.Errorf("failed to create libp2p host: %w", err)
 	}
 
 	kademliaDHT, err := dht.New(ctx, h)
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewHost: failed to create DHT: %w", err)
+		return nil, nil, fmt.Errorf("failed to create DHT: %w", err)
 	}
 
 	bootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos()
+	count := 0
 
 	for _, peerInfo := range bootstrapPeers {
 		if err := h.Connect(ctx, peerInfo); err != nil {
-			log.Printf("NewHost: failed to connect to bootstrap node %s: %v", peerInfo.ID, err)
+			fmt.Printf("failed to connect to bootstrap node %s: %v", peerInfo.ID, err)
 		} else {
-			log.Printf("NewHost: connected to bootstrap node: %s", peerInfo.ID)
+			count++
 		}
 	}
 
+	if count == 0 {
+		return nil, nil, fmt.Errorf("failed to connect to any bootstrap nodes")
+	}
+	fmt.Printf("Connected to %d bootstrap nodes\n", count)
+
 	if err = kademliaDHT.Bootstrap(ctx); err != nil {
-		return nil, nil, fmt.Errorf("NewHost: failed to bootstrap DHT: %w", err)
+		return nil, nil, fmt.Errorf("failed to bootstrap DHT: %w", err)
 	}
 
 	return h, kademliaDHT, nil
@@ -68,11 +73,11 @@ func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 func (n *Node) QueryAndConnect(ctx context.Context) (*peer.AddrInfo, error) {
 	providers, err := n.QueryAddress(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("QueryAndConnect: failed to query DHT: %w", err)
+		return nil, fmt.Errorf("failed to query DHT: %w", err)
 	}
 
 	if len(providers) == 0 {
-		return nil, fmt.Errorf("QueryAndConnect: no providers found for the given CID")
+		return nil, fmt.Errorf("no providers found for the given CID")
 	}
 
 	fmt.Printf("Retrieved %d provider(s)\n", len(providers))
@@ -82,17 +87,16 @@ func (n *Node) QueryAndConnect(ctx context.Context) (*peer.AddrInfo, error) {
 
 	for _, senderInfo := range providers {
 		if err := n.Host.Connect(ctx, senderInfo); err != nil {
-			fmt.Printf("Failed to connect to sender %s: %v\n", senderInfo.ID, err)
+			fmt.Printf("failed to connect to sender %s: %v\n", senderInfo.ID, err)
 			continue
 		}
-		fmt.Printf("Connected to: %s\n", senderInfo.ID)
 		connectedSender = senderInfo
 		connected = true
 		break
 	}
 
 	if !connected {
-		return nil, fmt.Errorf("QueryAndConnect: failed to connect to any sender")
+		return nil, fmt.Errorf("failed to connect to any sender")
 	}
 
 	return &connectedSender, nil
@@ -101,11 +105,11 @@ func (n *Node) QueryAndConnect(ctx context.Context) (*peer.AddrInfo, error) {
 func (n *Node) generateWordsAndCid() error {
 	words, err := protocol.GenerateRandomWords()
 	if err != nil {
-		return fmt.Errorf("generateWordsAndCid: failed to generate random words: %w", err)
+		return fmt.Errorf("failed to generate random words: %w", err)
 	}
 	cid, err := protocol.GenerateCIDFromWordAndTime(words[0])
 	if err != nil {
-		return fmt.Errorf("generateWordsAndCid: failed to generate CID: %w", err)
+		return fmt.Errorf("failed to generate CID: %w", err)
 	}
 	n.words = words
 	n.cid = cid
@@ -115,7 +119,7 @@ func (n *Node) generateWordsAndCid() error {
 func (n *Node) setWordsAndCid(words []string) error {
 	cid, err := protocol.GenerateCIDFromWordAndTime(words[0])
 	if err != nil {
-		return fmt.Errorf("setWordsAndCid: failed to generate CID: %w", err)
+		return fmt.Errorf("failed to generate CID: %w", err)
 	}
 	n.cid = cid
 	n.words = words

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"log"
 	"os"
 
 	"github.com/SyedMa3/peerlink/utils"
@@ -59,12 +58,11 @@ func ReadData(r *bufio.Reader, key []byte, file *os.File) []byte {
 	reader := NewPReader(r, key)
 
 	checksum := sha256.New()
-	n, err := io.Copy(io.MultiWriter(file, checksum), reader)
+	_, err := io.Copy(io.MultiWriter(file, checksum), reader)
 	if err != nil {
-		log.Printf("readData: failed to copy data to tmp file: %v", err)
+		fmt.Printf("readData: failed to copy data to tmp file: %v", err)
 		return nil
 	}
-	fmt.Println("readData: copied", n, "bytes to stdout")
 
 	return checksum.Sum(nil)
 }

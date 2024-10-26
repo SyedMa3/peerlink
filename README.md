@@ -22,6 +22,7 @@ PeerLink is a robust peer-to-peer (P2P) file transfer application designed to mi
 
 - **Secure File Transfer:** Utilizes Password-Authenticated Key Exchange (PAKE) for secure key exchange, ensuring that only intended recipients can access the files.
 - **File Verification:** Implements SHA-256 checksums to verify the integrity of transferred files.
+- **File Transfer Confirmation:** Allows the receiver to confirm the file transfer before saving it.
 - **Decentralized Networking:** Built on **libp2p** and **IPFS** to provide a decentralized network infrastructure, eliminating the need for centralized servers.
 - **Automatic NAT Traversal:** Enables seamless connections across different network configurations using libp2p's automatic NAT traversal features.
 
@@ -34,30 +35,10 @@ PeerLink operates through a command-line interface, offering two primary functio
 1. **Run PeerLink:**
 
    ```bash
-   go run main.go
+   go run main.go send <filename>
    ```
 
-2. **Select the Send Option:**
-
-   Upon running, you'll be prompted to choose an action:
-
-   ```
-   Choose an option:
-   1. Send a file
-   2. Receive a file
-   ```
-
-   Enter `1` to send a file.
-
-3. **Specify the File Path:**
-
-   You'll be prompted to enter the path of the file you wish to send:
-
-   ```
-   Enter the path of the file to send:
-   ```
-
-4. **Share the Secret Words:**
+2. **Share the Secret Words:**
 
    After providing the file path, PeerLink generates four secret words. Share these securely with the intended receiver:
 
@@ -66,11 +47,7 @@ PeerLink operates through a command-line interface, offering two primary functio
    word1 word2 word3 word4
    ```
 
-5. **Publish Address:**
-
-   PeerLink publishes the file's CID (Content Identifier) to the DHT, making it discoverable by the receiver.
-
-6. **Await Connection:**
+3. **Await Connection:**
 
    The application waits for the receiver to connect and request the file:
 
@@ -83,30 +60,19 @@ PeerLink operates through a command-line interface, offering two primary functio
 1. **Run PeerLink:**
 
    ```bash
-   go run main.go
+   go run main.go receive <input-passphrase>
    ```
 
-2. **Select the Receive Option:**
-
-   Choose to receive a file by entering `2` when prompted.
-
-3. **Enter the Secret Words:**
-
-   Provide the four secret words shared by the sender:
+2. **Confirm File Transfer:**
+   You will be prompted to confirm the file transfer:
 
    ```
-   Enter the four words shared by the sender (separated by spaces):
+   Received file metadata:
+   <file metadata>
+   Do you want to receive the file? (y/n)
    ```
 
-4. **Connect to the Sender:**
-
-   PeerLink uses the provided words to generate the CID and queries the DHT to find the sender.
-
-5. **Perform Handshake:**
-
-   A secure handshake is performed using PAKE to establish a shared encryption key.
-
-6. **Specify Save Location:**
+3. **Specify Save Location:**
 
    Enter the filename where the received file will be saved:
 
@@ -116,12 +82,12 @@ PeerLink operates through a command-line interface, offering two primary functio
 
    If a file with the specified name already exists, you'll be prompted to confirm overwriting.
 
-7. **Receive and Verify File:**
+4. **Receive and Verify File:**
 
    PeerLink downloads the file, verifies its integrity using the SHA-256 checksum, and saves it to the specified location.
 
    ```
-   File received and decrypted successfully
+   File received successfully
    ```
 
 ## Security
