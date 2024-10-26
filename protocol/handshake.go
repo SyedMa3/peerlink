@@ -3,7 +3,6 @@ package protocol
 import (
 	"fmt"
 	"io"
-	"log"
 	"strings"
 
 	"github.com/SyedMa3/peerlink/utils"
@@ -18,40 +17,40 @@ func HandleHandshake(stream network.Stream, words []string) ([]byte, error) {
 
 	p, err := pake.InitCurve(weakKey, 1, "siec")
 	if err != nil {
-		log.Printf("handleHandshake: failed to initialize PAKE: %v", err)
+		fmt.Printf("handleHandshake: failed to initialize PAKE: %v", err)
 		return nil, err
 	}
 
 	senderBytes, err := utils.ReadBytes(stream)
 	if err != nil {
-		log.Printf("handleHandshake: failed to read sender bytes: %v", err)
+		fmt.Printf("handleHandshake: failed to read sender bytes: %v", err)
 		return nil, err
 	}
 
 	if err := p.Update(senderBytes); err != nil {
-		log.Printf("handleHandshake: failed to update PAKE: %v", err)
+		fmt.Printf("handleHandshake: failed to update PAKE: %v", err)
 		return nil, err
 	}
 
 	receiverBytes := p.Bytes()
 	if _, err := stream.Write(receiverBytes); err != nil {
-		log.Printf("handleHandshake: failed to send receiver bytes: %v", err)
+		fmt.Printf("handleHandshake: failed to send receiver bytes: %v", err)
 		return nil, err
 	}
 
 	sessionKey, err := p.SessionKey()
 	if err != nil {
-		log.Printf("handleHandshake: failed to derive session key: %v", err)
+		fmt.Printf("handleHandshake: failed to derive session key: %v", err)
 		return nil, err
 	}
 
 	d, err := utils.ReadBytes(stream)
 	if err != io.EOF {
 		if err != nil {
-			log.Printf("handleHandshake: unexpected data received: %v", d)
+			fmt.Printf("handleHandshake: unexpected data received: %v", d)
 			return nil, err
 		}
-		log.Printf("handleHandshake: failed to read sender bytes: %v", err)
+		fmt.Printf("handleHandshake: failed to read sender bytes: %v", err)
 		return nil, err
 	}
 

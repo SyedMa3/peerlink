@@ -1,49 +1,66 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/SyedMa3/peerlink/p2p"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
-
 	// Create a new libp2p host with DHT
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	node, err := p2p.NewNode(ctx)
-	if err != nil {
-		log.Fatalf("main: failed to create node: %v", err)
+	app := &cli.App{
+		Name:  "peerlink",
+		Usage: "A peer-to-peer file sharing application",
+		Commands: []*cli.Command{
+			{
+				Name:      "send",
+				Usage:     "Send a file",
+				ArgsUsage: "<filename>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() < 1 {
+						return fmt.Errorf("filename is required")
+					}
+					filename := c.Args().First()
+					node, err := initNode(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to initialize node: %v", err)
+					}
+					defer node.Host.Close()
+					return p2p.HandleSend(ctx, node, filename)
+				},
+			},
+			{
+				Name:      "receive",
+				Usage:     "Receive a file",
+				ArgsUsage: "<input-passphrase>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() < 1 {
+						return fmt.Errorf("input passphrase is required")
+					}
+					passphrase := c.Args().First()
+					node, err := initNode(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to initialize node: %v", err)
+					}
+					defer node.Host.Close()
+					return p2p.HandleReceive(ctx, node, passphrase)
+				},
+			},
+		},
 	}
-	defer node.Host.Close()
 
-	// Prompt user for action
-	fmt.Println("\nChoose an option:")
-	fmt.Println("1. Send a file")
-	fmt.Println("2. Receive a file")
-	action, err := reader.ReadString('\n')
-	if err != nil {
+	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
-	action = strings.TrimSpace(action)
+}
 
-	switch action {
-	case "1":
-		if err := p2p.HandleSend(ctx, node); err != nil {
-			log.Fatalf("main: failed to handle send: %v", err)
-		}
-	case "2":
-		if err := p2p.HandleReceive(ctx, node); err != nil {
-			log.Fatalf("main: failed to handle receive: %v", err)
-		}
-	default:
-		log.Fatal("main: invalid option. Please choose '1' or '2'.")
-	}
+func initNode(ctx context.Context) (*p2p.Node, error) {
+	return p2p.NewNode(ctx)
 }
