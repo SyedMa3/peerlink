@@ -12,11 +12,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
-func SendFile(stream network.Stream, filePath string, key []byte, done chan bool) {
+func SendFile(stream network.Stream, filePath string, key []byte) {
 	defer stream.Close()
-	defer func() {
-		done <- true
-	}()
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -60,6 +57,11 @@ func SendFile(stream network.Stream, filePath string, key []byte, done chan bool
 		fmt.Printf("sendFile: failed to write data: %v", err)
 		return
 	}
+	err = w.Flush()
+	if err != nil {
+		fmt.Printf("sendFile: failed to flush writer: %v", err)
+		return
+	}
 	fmt.Println("File sent successfully")
 }
 
@@ -77,6 +79,5 @@ func ReceiveFile(stream network.Stream, file *os.File, key []byte) error {
 	if !bytes.Equal(checksum, calculatedChecksum) {
 		return fmt.Errorf("receiveFile: received file checksum does not match")
 	}
-
 	return nil
 }

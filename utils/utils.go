@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -109,15 +110,16 @@ func CalculateFileHash(file *os.File) ([]byte, error) {
 
 func CheckFileExists(filename string) (*os.File, error) {
 	// Check if file already exists
-	if _, err := os.Stat(filename); err == nil {
-		fmt.Printf("File %s already exists. Do you want to overwrite it? (y/n): ", filename)
-		answer, err := ReadInput()
-		if err != nil {
-			return nil, err
+	ext := filepath.Ext(filename)
+	baseFilename := strings.TrimSuffix(filename, ext)
+
+	counter := 1
+	for {
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			break
 		}
-		if strings.ToLower(answer) != "y" {
-			return nil, fmt.Errorf("user chose not to overwrite existing file. Closing")
-		}
+		filename = fmt.Sprintf("%s(%d)%s", baseFilename, counter, ext)
+		counter++
 	}
 
 	file, err := os.Create(filename)

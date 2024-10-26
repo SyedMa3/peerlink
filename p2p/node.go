@@ -63,7 +63,6 @@ func NewHost(ctx context.Context) (host.Host, *dht.IpfsDHT, error) {
 	if count == 0 {
 		return nil, nil, fmt.Errorf("failed to connect to any bootstrap nodes")
 	}
-	// fmt.Printf("Connected to %d bootstrap nodes\n", count)
 
 	if err = kademliaDHT.Bootstrap(ctx); err != nil {
 		return nil, nil, fmt.Errorf("failed to bootstrap DHT: %w", err)

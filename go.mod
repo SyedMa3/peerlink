@@ -3,6 +3,7 @@ module github.com/SyedMa3/peerlink
 go 1.22.5
 
 require (
+	github.com/briandowns/spinner v1.23.1
 	github.com/ipfs/go-cid v0.4.1
 	github.com/libp2p/go-libp2p v0.36.3
 	github.com/libp2p/go-libp2p-kad-dht v0.26.1
@@ -15,7 +16,6 @@ require (
 require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/briandowns/spinner v1.23.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect

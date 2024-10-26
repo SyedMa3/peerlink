@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	HandshakeProtocol    = "/handshake/1.0.0"
-	MetadataProtocol     = "/metadata/1.0.0"
-	FileTransferProtocol = "/file-transfer/1.0.0"
+	HandshakeProtocol     = "/handshake/1.0.0"
+	MetadataProtocol      = "/metadata/1.0.0"
+	FileTransferProtocol  = "/file-transfer/1.0.0"
+	CompleteCheckProtocol = "/complete-check/1.0.0"
 )
 
 func HandleSend(ctx context.Context, node *Node, filePath string) error {
@@ -29,17 +30,17 @@ func HandleSend(ctx context.Context, node *Node, filePath string) error {
 		return fmt.Errorf("handleSend: failed to generate words and CID: %w", err)
 	}
 
-	done := make(chan bool)
-
+	handshakeDone := make(chan bool)
 	node.Host.SetStreamHandler(HandshakeProtocol, func(stream network.Stream) {
 		go func() {
-			done <- true
+			handshakeDone <- true
 			node.sharedKey, err = protocol.HandleHandshake(stream, node.words)
 			if err != nil {
 				fmt.Printf("handshake failed\n")
 				panic(err)
 			}
 			fmt.Println("Handshake completed successfully")
+			handshakeDone <- true
 		}()
 	})
 
@@ -52,9 +53,9 @@ func HandleSend(ctx context.Context, node *Node, filePath string) error {
 	}
 	fmt.Println("Share the following four words with the receiver securely:")
 	fmt.Println(strings.Join(node.words, "-"))
+	<-handshakeDone
 
-	<-done
-
+	metadataDone := make(chan bool)
 	node.Host.SetStreamHandler(MetadataProtocol, func(stream network.Stream) {
 		go func() {
 			fileInfo, err := os.Stat(filePath)
@@ -66,30 +67,40 @@ func HandleSend(ctx context.Context, node *Node, filePath string) error {
 				Filename: filePath,
 				Size:     fileInfo.Size(),
 			}
+			<-handshakeDone
+			metadataDone <- true
 			willReceive, err := protocol.SendMetadata(stream, metadata, node.sharedKey)
 			if err != nil {
-				fmt.Printf("handleSend: handshake failed\n")
+				fmt.Printf("handleSend: metadata exchange failed\n")
 				panic(err)
 			}
 			if willReceive {
-				done <- true
+				metadataDone <- true
 				return
 			}
-			done <- false
+			metadataDone <- false
 		}()
 	})
 
-	willReceive := <-done
+	fmt.Println("\nWaiting for the receiver to connect and request the file...")
+	<-metadataDone
+	node.Host.SetStreamHandler(FileTransferProtocol, func(stream network.Stream) {
+		go protocol.SendFile(stream, filePath, node.sharedKey)
+	})
+	willReceive := <-metadataDone
 	if !willReceive {
-		return fmt.Errorf("handleSend: receiver will not receive the file")
+		fmt.Println("Receiver declined the file transfer")
+		return nil
 	}
 
-	node.Host.SetStreamHandler(FileTransferProtocol, func(stream network.Stream) {
-		go protocol.SendFile(stream, filePath, node.sharedKey, done)
+	completeCheckDone := make(chan bool)
+	node.Host.SetStreamHandler(CompleteCheckProtocol, func(stream network.Stream) {
+		go func() {
+			protocol.ReceiveCompleteCheck(stream, node.sharedKey)
+			completeCheckDone <- true
+		}()
 	})
-	fmt.Println("\nWaiting for the receiver to connect and request the file...")
-
-	<-done
+	<-completeCheckDone
 
 	return nil
 }
@@ -119,47 +130,46 @@ func HandleReceive(ctx context.Context, node *Node, passphrase string) error {
 	}
 	fmt.Println("Handshake completed successfully")
 
-	err = startMetadataExchange(ctx, node, connectedSender)
+	filename, err := startMetadataExchange(ctx, node, connectedSender)
 	if err != nil {
 		return fmt.Errorf("handleReceive: failed to exchange metadata: %w", err)
 	}
 
-	if err := startFileReceive(ctx, node, connectedSender); err != nil {
+	receivedFilename, err := startFileReceive(ctx, node, connectedSender, filename)
+	if err != nil {
 		return fmt.Errorf("handleReceive: failed to receive file: %w", err)
 	}
-	fmt.Println("\nFile received and decrypted successfully")
+	fmt.Printf("\nFile received successfully and saved as %s\n", receivedFilename)
 
 	return nil
 }
 
-func startFileReceive(ctx context.Context, node *Node, senderID *peer.AddrInfo) error {
-
-	fmt.Print("Enter the filename to save the received file: ")
-	filename, err := utils.ReadInput()
-	if err != nil {
-		return fmt.Errorf("startFileReceive: failed to read filename input: %w", err)
-	}
-
+func startFileReceive(ctx context.Context, node *Node, senderID *peer.AddrInfo, filename string) (string, error) {
 	file, err := utils.CheckFileExists(filename)
 	if err != nil {
-		return fmt.Errorf("startFileReceive: %w", err)
+		return "", fmt.Errorf("startFileReceive: %w", err)
 	}
 	defer file.Close()
 
 	stream, err := node.Host.NewStream(ctx, senderID.ID, FileTransferProtocol)
 	if err != nil {
-		return fmt.Errorf("startFileReceive: failed to create file transfer stream: %w", err)
+		return "", fmt.Errorf("startFileReceive: failed to create file transfer stream: %w", err)
 	}
-	defer stream.Close()
 
 	err = protocol.ReceiveFile(stream, file, node.sharedKey)
+	stream.Close()
 	if err != nil {
-		return fmt.Errorf("startFileReceive: failed to receive file: %w", err)
+		return "", fmt.Errorf("startFileReceive: failed to receive file: %w", err)
 	}
 
+	stream, err = node.Host.NewStream(ctx, senderID.ID, CompleteCheckProtocol)
+	if err != nil {
+		return "", fmt.Errorf("startFileReceive: failed to create complete check stream: %w", err)
+	}
+	protocol.SendCompleteCheck(stream, node.sharedKey)
 	stream.Close()
 
-	return nil
+	return file.Name(), nil
 }
 
 func startHandshake(ctx context.Context, node *Node, senderID *peer.AddrInfo) error {
@@ -178,22 +188,22 @@ func startHandshake(ctx context.Context, node *Node, senderID *peer.AddrInfo) er
 	return nil
 }
 
-func startMetadataExchange(ctx context.Context, node *Node, senderID *peer.AddrInfo) error {
+func startMetadataExchange(ctx context.Context, node *Node, senderID *peer.AddrInfo) (string, error) {
 	metadataStream, err := node.Host.NewStream(ctx, senderID.ID, MetadataProtocol)
 	if err != nil {
-		return fmt.Errorf("startMetadataExchange: failed to create metadata stream: %w", err)
+		return "", fmt.Errorf("startMetadataExchange: failed to create metadata stream: %w", err)
 	}
 	defer metadataStream.Close()
 
 	// After handshake, receive metadata
-	accept, err := protocol.ReceiveMetadata(metadataStream, node.sharedKey)
+	filename, accept, err := protocol.ReceiveMetadata(metadataStream, node.sharedKey)
 	if err != nil {
-		return fmt.Errorf("startMetadataExchange: failed to receive metadata: %w", err)
+		return "", fmt.Errorf("startMetadataExchange: failed to receive metadata: %w", err)
 	}
 
 	if accept {
-		return nil
+		return filename, nil
 	}
 
-	return fmt.Errorf("startMetadataExchange: receiver declined the file transfer")
+	return "", fmt.Errorf("startMetadataExchange: receiver declined the file transfer")
 }

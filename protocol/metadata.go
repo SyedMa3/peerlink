@@ -58,7 +58,7 @@ func SendMetadata(stream network.Stream, metadata Metadata, key []byte) (bool, e
 	}
 }
 
-func ReceiveMetadata(stream network.Stream, key []byte) (bool, error) {
+func ReceiveMetadata(stream network.Stream, key []byte) (string, bool, error) {
 	defer stream.Close()
 
 	// Initialize a buffered writer and reader
@@ -72,21 +72,21 @@ func ReceiveMetadata(stream network.Stream, key []byte) (bool, error) {
 	metadataBytes := make([]byte, 1024)
 	_, err := preader.Read(metadataBytes)
 	if err != nil {
-		return false, fmt.Errorf("ReceiveMetadata: failed to read metadata: %w", err)
+		return "", false, fmt.Errorf("ReceiveMetadata: failed to read metadata: %w", err)
 	}
 
 	// Deserialize metadata
 	var metadata Metadata
 	err = json.Unmarshal(bytes.TrimRight(metadataBytes, "\x00"), &metadata)
 	if err != nil {
-		return false, fmt.Errorf("ReceiveMetadata: failed to unmarshal metadata: %w", err)
+		return "", false, fmt.Errorf("ReceiveMetadata: failed to unmarshal metadata: %w", err)
 	}
 
 	// Prompt user for confirmation (Assuming a synchronous prompt)
 	fmt.Printf("Received file metadata:\nFilename: %s\nSize: %d bytes\nDo you want to receive this file? (y/n): ", metadata.Filename, metadata.Size)
 	response, err := utils.ReadInput()
 	if err != nil {
-		return false, fmt.Errorf("ReceiveMetadata: failed to read user input: %w", err)
+		return "", false, fmt.Errorf("ReceiveMetadata: failed to read user input: %w", err)
 	}
 	response = strings.TrimSpace(strings.ToLower(response))
 
@@ -97,12 +97,12 @@ func ReceiveMetadata(stream network.Stream, key []byte) (bool, error) {
 
 	_, err = pwriter.Write([]byte(response))
 	if err != nil {
-		return false, fmt.Errorf("ReceiveMetadata: failed to send confirmation: %w", err)
+		return "", false, fmt.Errorf("ReceiveMetadata: failed to send confirmation: %w", err)
 	}
 	err = writer.Flush()
 	if err != nil {
-		return false, fmt.Errorf("ReceiveMetadata: failed to flush writer: %w", err)
+		return "", false, fmt.Errorf("ReceiveMetadata: failed to flush writer: %w", err)
 	}
 
-	return response == "y", nil
+	return metadata.Filename, response == "y", nil
 }
